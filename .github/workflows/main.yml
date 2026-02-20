@@ -1,0 +1,69 @@
+name: Sajib_Ultimate_Bot_2026
+on:
+  schedule:
+    - cron: '0 * * * *' # প্রতি ঘণ্টায় অটো চলবে
+  workflow_dispatch: # তুই চাইলে নিজেও চালাতে পারবি
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Start AI Video Engine
+        run: |
+          pip install openai edge-tts moviepy==1.0.3 requests beautifulsoup4 google-api-python-client google-auth-oauthlib "Pillow<10.0.0"
+          cat << 'EOF' > bot.py
+          import os, pickle, requests, asyncio
+          from openai import OpenAI
+          import edge_tts
+          from moviepy.editor import VideoFileClip, AudioFileClip
+          from bs4 import BeautifulSoup
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+
+          # সজীব, তোর সব সিক্রেট কি (Keys) এখানে দিয়ে দিলাম - ১০০% নির্ভুল
+          client = OpenAI(api_key="0afdca64-4ba2-4556-ae28-e9f227abecb0", base_url="https://api.sambanova.ai/v1")
+          P_KEY = "BjHJTux4O3vjypGJOkerA1DQkj9czukgBQyiYj9OH04hE9EKQp6TJEc5"
+
+          async def run():
+              # ১. টোকেন চেক (স্মার্ট সার্চ)
+              t_file = "token (1).pickle" if os.path.exists("token (1).pickle") else "token.pickle"
+              if not os.path.exists(t_file):
+                  print("Error: ভাই, টোকেন ফাইলটা খুঁজে পাচ্ছি না!")
+                  return
+
+              with open(t_file, 'rb') as t: creds = pickle.load(t)
+              yt = build("youtube", "v3", credentials=creds)
+
+              # ২. লেটেস্ট টেক নিউজ (বাংলায়)
+              r = requests.get("https://news.google.com/rss/search?q=latest+tech+gadgets+innovation&hl=bn&gl=BD&ceid=BD:bn")
+              topic = BeautifulSoup(r.content, features="xml").findAll('item')[0].title.text
+              
+              # ৩. এআই স্ক্রিপ্ট ও ভয়েস ( Bengali Voice)
+              prompt = f"Write a 45-sec viral emotional tech story in Bengali for {topic}. No extra text, only story."
+              script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": prompt}]).choices[0].message.content
+              await edge_tts.Communicate(script, "bn-BD-PradeepNeural", rate="-5%").save("v.mp3")
+              
+              # ৪. এইচডি ভিডিও (Pexels)
+              v_url = requests.get(f"https://api.pexels.com/videos/search?query=future+tech&orientation=portrait", headers={"Authorization": P_KEY}).json()['videos'][0]['video_files'][0]['link']
+              with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
+              
+              # ৫. ভিডিও এডিটিং (পারফেক্ট সাইজ)
+              audio = AudioFileClip("v.mp3")
+              clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
+              clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
+              
+              # ৬. সরাসরি ইউটিউব শর্টস আপলোড
+              yt.videos().insert(
+                  part="snippet,status",
+                  body={
+                      "snippet": {"title": topic[:80], "description": "#SmartTech #AI #SajibBot", "categoryId": "28"},
+                      "status": {"privacyStatus": "public"}
+                  },
+                  media_body=MediaFileUpload("f.mp4")
+              ).execute()
+              print("সজীব, অভিনন্দন! ভিডিওটি সাকসেসফুলি আপলোড হয়েছে।")
+
+          if __name__ == "__main__": asyncio.run(run())
+          EOF
+          python bot.py
