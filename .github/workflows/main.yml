@@ -1,4 +1,4 @@
-name: Sajib_Final_Fixed_Bot
+name: Sajib_Final_Fixed_Bot_v3
 on:
   workflow_dispatch:
 
@@ -10,19 +10,19 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      # ১. এই নতুন ধাপটা মিসিং ফাইল ইনস্টল করবে (আগে এটাই ছিল না)
+      # ১. সিস্টেম ফাইল ইনস্টল (Pillow এর জন্য)
       - name: Install System Libraries
         run: |
           sudo apt-get update
           sudo apt-get install -y libjpeg-dev zlib1g-dev libpng-dev imagemagick
 
+      # ২. পাইথন লাইব্রেরি ইনস্টল (এখানেই lxml যোগ করলাম)
       - name: Install Python Libraries & Run
         run: |
-          # পিপ আপডেট করে নিচ্ছি যাতে ইনস্টলেশনে ঝামেলা না হয়
           pip install --upgrade pip
           
-          # লাইব্রেরিগুলো স্পেসিফিক ভার্সনে ইনস্টল করছি
-          pip install openai edge-tts requests beautifulsoup4 google-api-python-client google-auth-oauthlib
+          # lxml যোগ করা হয়েছে যাতে XML এরর না আসে
+          pip install openai edge-tts requests beautifulsoup4 lxml google-api-python-client google-auth-oauthlib
           pip install "Pillow>=9.0.0" 
           pip install moviepy==1.0.3
 
@@ -50,42 +50,8 @@ jobs:
                   yt = build("youtube", "v3", credentials=creds)
 
                   print("2. Getting News...")
+                  # XML পার্স করার জন্য lxml ব্যবহার করা হচ্ছে
                   r = requests.get("https://news.google.com/rss/search?q=latest+tech+gadgets&hl=bn&gl=BD&ceid=BD:bn")
-                  items = BeautifulSoup(r.content, features="xml").findAll('item')
-                  if not items: raise Exception("No news found from Google!")
-                  topic = items[0].title.text
+                  soup = BeautifulSoup(r.content, features="xml") # এখানে lxml দরকার
+                  items = soup.findAll('
                   
-                  print(f"3. Topic: {topic}")
-                  script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": f"Write a 40-sec tech story in Bengali for {topic}"}]).choices[0].message.content
-                  await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("v.mp3")
-                  
-                  print("4. Downloading Video...")
-                  headers = {"Authorization": P_KEY}
-                  v_data = requests.get(f"https://api.pexels.com/videos/search?query=technology&orientation=portrait&per_page=1", headers=headers).json()
-                  if not v_data.get('videos'): raise Exception("No video found on Pexels!")
-                  
-                  v_url = v_data['videos'][0]['video_files'][0]['link']
-                  with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
-                  
-                  print("5. Editing...")
-                  audio = AudioFileClip("v.mp3")
-                  clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
-                  clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
-                  
-                  print("6. Uploading...")
-                  yt.videos().insert(
-                      part="snippet,status",
-                      body={"snippet": {"title": topic[:80], "categoryId": "28"}, "status": {"privacyStatus": "public"}},
-                      media_body=MediaFileUpload("f.mp4")
-                  ).execute()
-                  print("SUCCESS: Video Uploaded!")
-
-              except Exception as e:
-                  print(f"\nCRITICAL ERROR: {str(e)}")
-                  sys.exit(1)
-
-          if __name__ == "__main__": asyncio.run(run())
-          EOF
-          
-          # বোট চালানো
-          python bot.py
