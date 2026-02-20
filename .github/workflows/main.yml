@@ -1,107 +1,179 @@
-name: Sajib_Ultra_Pro_Max_Bot
+name: Sajib_Viral_India_Bot_Pro
 on:
-  workflow_dispatch:
+  workflow_dispatch: # তুই যখন খুশি ম্যানুয়ালি চালাতে পারবি
+  schedule:
+    - cron: '0 * * * *' # প্রতি ঘণ্টায় অটোমেটিক চলবে (Total 12-24 times/day)
 
 jobs:
-  everything:
+  viral_production:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v3
-      
-      # ১. সিস্টেম ফাইল এবং পারমিশন ফিক্স (যাতে কোনোদিন আটকাবে না)
-      - name: Install System Dependencies
+
+      # ১. সিস্টেম সেটআপ (সব টুলস)
+      - name: Install High-End Video Tools
         run: |
           sudo apt-get update
           sudo apt-get install -y libjpeg-dev zlib1g-dev libpng-dev imagemagick ffmpeg
-          # ImageMagick এর পলিসি ফিক্স (যাতে টেক্সট লিখলে এরর না দেয়)
           sudo sed -i 's/none/read,write/g' /etc/ImageMagick-6/policy.xml
 
-      # ২. লাইব্রেরি ফিক্স (Pillow 9.5.0 দিচ্ছি যা সবথেকে স্টেবল)
-      - name: Install Python Libraries & Run
+      # ২. ব্রেন ইনস্টল (AI & Video Libraries)
+      - name: Install Python AI Brain
         run: |
           pip install --upgrade pip
-          # ঠিক এই ভার্সনটাই লাগবে, অন্যথায় এরর খাবে
-          pip install "Pillow==9.5.0" 
-          pip install moviepy==1.0.3
-          pip install openai edge-tts requests beautifulsoup4 lxml google-api-python-client google-auth-oauthlib
+          pip install "Pillow==9.5.0" moviepy==1.0.3
+          pip install openai edge-tts requests beautifulsoup4 lxml google-api-python-client google-auth-oauthlib pytrends
 
-          # মেইন বোট কোড (অটো ফিক্সার সহ)
           cat << 'EOF' > bot.py
-          import os, sys
-          
-          # --- AUTO FIX SECTION START ---
-          # বোট নিজেই চেক করবে ANTIALIAS আছে কি না, না থাকলে বানিয়ে নেবে
+          import os, sys, pickle, requests, asyncio, random, time
           import PIL.Image
-          if not hasattr(PIL.Image, 'ANTIALIAS'):
-              PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
-          # --- AUTO FIX SECTION END ---
+          if not hasattr(PIL.Image, 'ANTIALIAS'): PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
 
-          import pickle, requests, asyncio
           from openai import OpenAI
           import edge_tts
-          from moviepy.editor import VideoFileClip, AudioFileClip
+          from moviepy.editor import VideoFileClip, AudioFileClip, concatenate_videoclips, CompositeAudioClip, TextClip, CompositeVideoClip
           from bs4 import BeautifulSoup
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
+          # --- CONFIGURATION ---
           client = OpenAI(api_key="0afdca64-4ba2-4556-ae28-e9f227abecb0", base_url="https://api.sambanova.ai/v1")
           P_KEY = "BjHJTux4O3vjypGJOkerA1DQkj9czukgBQyiYj9OH04hE9EKQp6TJEc5"
+          
+          # ইন্ডিয়ান ভাইরাল কিওয়ার্ডস
+          VIRAL_KEYWORDS = ["Indian tech news", "ISRO updates", "Indian railways new tech", "Jio latest offer", "Made in India gadgets", "Viral Indian hacks"]
 
           async def run():
               try:
-                  print("--- STARTED ---")
+                  print("--- VIRAL ENGINE STARTED ---")
                   
-                  # 1. Token Check
+                  # 1. ইউটিউব লগইন
                   t_file = "token.pickle" if os.path.exists("token.pickle") else "token (1).pickle"
-                  if not os.path.exists(t_file): raise Exception("Token file missing!")
+                  if not os.path.exists(t_file): raise Exception("Token missing!")
                   with open(t_file, 'rb') as t: creds = pickle.load(t)
                   yt = build("youtube", "v3", credentials=creds)
 
-                  # 2. News
-                  print("Fetching News...")
-                  r = requests.get("https://news.google.com/rss/search?q=latest+tech+gadgets&hl=bn&gl=BD&ceid=BD:bn")
+                  # 2. স্মার্ট রিসার্চ (গুগল ট্রেন্ডস স্টাইল)
+                  # আমরা ঘুরিয়ে ফিরিয়ে টপিক চেক করব যাতে একঘেয়ে না হয়
+                  search_q = random.choice(VIRAL_KEYWORDS)
+                  print(f"Researching Viral Topic on: {search_q}...")
+                  
+                  r = requests.get(f"https://news.google.com/rss/search?q={search_q}&hl=bn&gl=IN&ceid=IN:bn")
                   soup = BeautifulSoup(r.content, features="xml")
                   items = soup.findAll('item')
-                  if not items: raise Exception("Google News returned empty!")
-                  topic = items[0].title.text
-                  print(f"Topic: {topic}")
+                  
+                  if not items: 
+                      print("No news found, using backup topic.")
+                      topic = "Top 5 Indian Tech Gadgets 2026"
+                  else:
+                      # প্রথম ৫টা খবরের মধ্যে থেকে র‍্যান্ডম একটা নেবে
+                      topic = items[random.randint(0, min(4, len(items)-1))].title.text
 
-                  # 3. Script & Audio
-                  print("Generating Audio...")
-                  script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": f"Write a 40-sec tech story in Bengali for {topic}"}]).choices[0].message.content
-                  await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("v.mp3")
+                  print(f"🔥 FINAL VIRAL TOPIC: {topic}")
 
-                  # 4. Video Download
-                  print("Downloading Video...")
+                  # 3. ভাইরাল স্ক্রিপ্ট রাইটিং (ইন্ডিয়ান স্টাইল)
+                  print("Writing Script with 'Masala'...")
+                  prompt = f"""
+                  Act as a famous Indian Bengali Tech YouTuber. 
+                  Write a script for a YouTube Short about: '{topic}'.
+                  
+                  Rules:
+                  1. Language: Bengali (Mix of standard and trendy words).
+                  2. Tone: Exciting, Fast-paced, Viral.
+                  3. Start with a hook (Ex: "জানেন কি ইন্ডিয়াতে কী হতে চলেছে?").
+                  4. Length: Exactly 45 seconds of speaking.
+                  5. No emojis, just text.
+                  """
+                  script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": prompt}]).choices[0].message.content
+                  
+                  # ভয়েস জেনারেশন
+                  await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("voice.mp3")
+
+                  # 4. ১০টা সিন মিক্সিং (Ten-Scene Strategy)
+                  print("Downloading 5-8 Dynamic Clips...")
                   headers = {"Authorization": P_KEY}
-                  v_data = requests.get(f"https://api.pexels.com/videos/search?query=technology&orientation=portrait&per_page=1", headers=headers).json()
-                  if not v_data.get('videos'): raise Exception("Pexels video not found!")
-                  v_url = v_data['videos'][0]['video_files'][0]['link']
-                  with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
+                  
+                  # টপিকের ওপর ভিত্তি করে সার্চ টার্ম
+                  search_terms = ["technology india", "future city", "ai robot", "smartphone", "digital india", "cyberpunk", "hacker", "coding"]
+                  random.shuffle(search_terms)
+                  
+                  clips = []
+                  downloaded_count = 0
+                  
+                  for term in search_terms:
+                      if downloaded_count >= 6: break # ৬-৮টা ক্লিপ যথেষ্ট
+                      
+                      v_res = requests.get(f"https://api.pexels.com/videos/search?query={term}&orientation=portrait&per_page=3", headers=headers).json()
+                      if v_res.get('videos'):
+                          # র‍্যান্ডম ভিডিও পিক করবে
+                          vid_obj = v_res['videos'][random.randint(0, len(v_res['videos'])-1)]
+                          v_url = vid_obj['video_files'][0]['link']
+                          
+                          fname = f"clip_{downloaded_count}.mp4"
+                          with open(fname, "wb") as f: f.write(requests.get(v_url).content)
+                          
+                          # ক্লিপ প্রসেসিং (২-৩ সেকেন্ডের ফাস্ট কাট)
+                          try:
+                              clip = VideoFileClip(fname).resize(height=1920).crop(x1=0, width=1080, height=1920)
+                              # প্রতিটা ক্লিপ র‍্যান্ডম ডিউরেশন (২ থেকে ৪ সেকেন্ড)
+                              clip_duration = random.uniform(2.5, 4.5)
+                              clip = clip.subclip(0, clip_duration)
+                              clips.append(clip)
+                              downloaded_count += 1
+                              print(f"Clip {downloaded_count} added ({term})")
+                          except:
+                              pass
 
-                  # 5. Editing
-                  print("Rendering Video...")
-                  audio = AudioFileClip("v.mp3")
-                  clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
-                  clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
+                  # 5. মাস্টারি এডিটিং (Mixing)
+                  print("Mixing everything like a Pro Editor...")
+                  voice_audio = AudioFileClip("voice.mp3")
+                  
+                  # ব্যাকগ্রাউন্ড মিউজিক (সাসপেন্স/টেক)
+                  bg_url = "https://cdn.pixabay.com/download/audio/2022/03/22/audio_c8c8a73467.mp3" # Tech Background
+                  with open("bg.mp3", "wb") as f: f.write(requests.get(bg_url).content)
+                  bg_audio = AudioFileClip("bg.mp3").volumex(0.12).subclip(0, voice_audio.duration) # ভলিউম কম
+                  
+                  # ভিডিও জোড়া লাগানো
+                  final_visual = concatenate_videoclips(clips, method="compose")
+                  
+                  # ভিডিও যদি ভয়েসের চেয়ে ছোট হয়, লুপ করবে
+                  while final_visual.duration < voice_audio.duration:
+                      final_visual = concatenate_videoclips([final_visual, final_visual])
+                  
+                  # ফাইনাল কাট
+                  final_visual = final_visual.subclip(0, voice_audio.duration)
+                  
+                  # অডিও মিক্স
+                  final_audio = CompositeAudioClip([voice_audio, bg_audio])
+                  final_video = final_visual.set_audio(final_audio)
+                  
+                  # 6. রেন্ডারিং
+                  final_video.write_videofile("final_viral.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
 
-                  # 6. Upload
-                  print("Uploading to YouTube...")
+                  # 7. আপলোড ও শিডিউল মেইনটেইন
+                  print("Uploading Viral Short...")
+                  tags = ["#Shorts", "#India", "#TechNews", "#Viral", "#BanglaNews", "#Gadgets"]
+                  title = f"{topic[:50]}... 😱🔥 #Shorts"
+                  
                   request = yt.videos().insert(
                       part="snippet,status",
                       body={
-                          "snippet": {"title": topic[:80], "categoryId": "28"},
+                          "snippet": {
+                              "title": title, 
+                              "description": f"{topic}\n\nSubscribe for more Indian Tech Updates!\n{' '.join(tags)}",
+                              "categoryId": "28"
+                          },
                           "status": {"privacyStatus": "public"}
                       },
-                      media_body=MediaFileUpload("f.mp4")
+                      media_body=MediaFileUpload("final_viral.mp4")
                   )
-                  response = request.execute()
-                  print(f"SUCCESS! Video Link: https://youtu.be/{response['id']}")
+                  res = request.execute()
+                  print(f"SUCCESS! Video is Live: https://youtube.com/shorts/{res['id']}")
 
               except Exception as e:
-                  print(f"\nCRITICAL ERROR: {str(e)}")
+                  print(f"ERROR: {str(e)}")
                   sys.exit(1)
 
           if __name__ == "__main__": asyncio.run(run())
