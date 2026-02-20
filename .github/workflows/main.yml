@@ -1,75 +1,79 @@
-name: Sajib_Ultimate_Bot_2026
+
+name: Sajib_Ultimate_Bot_Final_2026
 on:
-  schedule:
-    - cron: '0 * * * *' 
   workflow_dispatch: 
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # পারমিশন আগে থেকেই দিয়ে রাখলাম
     steps:
       - uses: actions/checkout@v3
-      - name: Setup environment
+      - name: System Update & Install
         run: |
-          # সব লাইব্রেরি একদম সঠিক ভার্সন অনুযায়ী ইনস্টল হবে
-          pip install openai edge-tts requests beautifulsoup4 google-api-python-client google-auth-oauthlib
-          pip install "Pillow<10.0.0" 
-          pip install moviepy==1.0.3 proglog
-          
-      - name: Run Bot Engine
+          pip install openai edge-tts requests beautifulsoup4 google-api-python-client google-auth-oauthlib "Pillow<10.0.0" moviepy==1.0.3
+      - name: Run AI Video Engine
         run: |
           cat << 'EOF' > bot.py
-          import os, pickle, requests, asyncio
+          import os, pickle, requests, asyncio, sys
           from openai import OpenAI
           import edge_tts
-          from moviepy.editor import VideoFileClip, AudioFileClip, TextClip, CompositeVideoClip
+          from moviepy.editor import VideoFileClip, AudioFileClip
           from bs4 import BeautifulSoup
           from googleapiclient.discovery import build
           from googleapiclient.http import MediaFileUpload
 
-          # তোর সিক্রেট কি গুলো এখানে ফিক্সড
+          # সজীব, তোর সিক্রেট চাবিকাঠি
           client = OpenAI(api_key="0afdca64-4ba2-4556-ae28-e9f227abecb0", base_url="https://api.sambanova.ai/v1")
           P_KEY = "BjHJTux4O3vjypGJOkerA1DQkj9czukgBQyiYj9OH04hE9EKQp6TJEc5"
 
           async def run():
-              # ১. টোকেন ফাইল চেক
-              t_file = "token.pickle" if os.path.exists("token.pickle") else "token (1).pickle"
-              if not os.path.exists(t_file):
-                  print("Error: চাবিকাঠি (Token) খুঁজে পাওয়া যাচ্ছে না!")
-                  return
+              print("--- বোটের কাজ শুরু হলো সজীব ---")
+              try:
+                  # ১. টোকেন চেক (প্রবলেম এখানে হলে ধরা পড়বে)
+                  t_file = "token.pickle" if os.path.exists("token.pickle") else "token (1).pickle"
+                  if not os.path.exists(t_file):
+                      raise Exception("Error: তোর token.pickle ফাইলটা গিটহাবে খুঁজে পাওয়া যাচ্ছে না!")
+                  
+                  print(f"চাবিকাঠি পাওয়া গেছে: {t_file}")
+                  with open(t_file, 'rb') as t: creds = pickle.load(t)
+                  yt = build("youtube", "v3", credentials=creds)
 
-              with open(t_file, 'rb') as t: creds = pickle.load(t)
-              yt = build("youtube", "v3", credentials=creds)
+                  # ২. বাংলা নিউজ খোঁজা
+                  print("নিউজ খুঁজছি...")
+                  r = requests.get("https://news.google.com/rss/search?q=latest+tech+innovation&hl=bn&gl=BD&ceid=BD:bn")
+                  topic = BeautifulSoup(r.content, features="xml").findAll('item')[0].title.text
+                  
+                  # ৩. স্ক্রিপ্ট ও ভয়েস
+                  print(f"টপিক: {topic}")
+                  script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": f"Write a 40-sec tech story in Bengali for {topic}"}]).choices[0].message.content
+                  await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("v.mp3")
+                  print("ভয়েস তৈরি শেষ।")
 
-              # ২. লেটেস্ট টেক নিউজ
-              r = requests.get("https://news.google.com/rss/search?q=latest+technology&hl=bn&gl=BD&ceid=BD:bn")
-              topic = BeautifulSoup(r.content, features="xml").findAll('item')[0].title.text
-              
-              # ৩. স্ক্রিপ্ট ও ভয়েস
-              script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": f"Write a 40-sec tech story in Bengali for {topic}"}]).choices[0].message.content
-              await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("v.mp3")
-              
-              # ৪. ভিডিও ডাউনলোড ও এডিট
-              v_data = requests.get(f"https://api.pexels.com/videos/search?query=future+tech&orientation=portrait", headers={"Authorization": P_KEY}).json()
-              v_url = v_data['videos'][0]['video_files'][0]['link']
-              with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
-              
-              audio = AudioFileClip("v.mp3")
-              # ভিডিওর সাইজ ঠিক করা (YouTube Shorts এর জন্য)
-              clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
-              clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
-              
-              # ৫. ইউটিউব আপলোড
-              request = yt.videos().insert(
-                  part="snippet,status",
-                  body={
-                      "snippet": {"title": topic[:100], "categoryId": "28"},
-                      "status": {"privacyStatus": "public"}
-                  },
-                  media_body=MediaFileUpload("f.mp4")
-              )
-              request.execute()
-              print("সফলভাবে ভিডিও আপলোড হয়েছে!")
+                  # ৪. ভিডিও ডাউনলোড
+                  v_res = requests.get(f"https://api.pexels.com/videos/search?query=future+tech&orientation=portrait", headers={"Authorization": P_KEY}).json()
+                  if 'videos' not in v_res or not v_res['videos']:
+                      raise Exception("Error: Pexels থেকে ভিডিও ডাউনলোড করা যাচ্ছে না। API Key চেক কর।")
+                  
+                  v_url = v_res['videos'][0]['video_files'][0]['link']
+                  with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
+
+                  # ৫. এডিটিং
+                  print("ভিডিও এডিট করছি...")
+                  audio = AudioFileClip("v.mp3")
+                  clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
+                  clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
+
+                  # ৬. আপলোড
+                  print("ইউটিউবে আপলোড করছি...")
+                  yt.videos().insert(part="snippet,status", body={"snippet": {"title": topic[:80], "categoryId": "28"}, "status": {"privacyStatus": "public"}}, media_body=MediaFileUpload("f.mp4")).execute()
+                  print("--- অভিনন্দন সজীব! ভিডিও আপলোড সফল হয়েছে ---")
+
+              except Exception as e:
+                  print("\n!!! বড় প্রবলেম পাওয়া গেছে !!!")
+                  print(str(e))
+                  sys.exit(1) # এটা দিলে গিটহাব তোকে লাল ক্রসে সঠিক কারণটা দেখাবে
 
           if __name__ == "__main__": asyncio.run(run())
           EOF
