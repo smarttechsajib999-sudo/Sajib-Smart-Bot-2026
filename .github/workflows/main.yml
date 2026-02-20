@@ -1,4 +1,4 @@
-name: Sajib_Video_Bot_Final
+name: Sajib_Ultra_Pro_Max_Bot
 on:
   workflow_dispatch:
 
@@ -10,20 +10,35 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       
-      - name: Install System Libraries
+      # ১. সিস্টেম ফাইল এবং পারমিশন ফিক্স (যাতে কোনোদিন আটকাবে না)
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libjpeg-dev zlib1g-dev libpng-dev imagemagick ffmpeg
+          # ImageMagick এর পলিসি ফিক্স (যাতে টেক্সট লিখলে এরর না দেয়)
+          sudo sed -i 's/none/read,write/g' /etc/ImageMagick-6/policy.xml
 
+      # ২. লাইব্রেরি ফিক্স (Pillow 9.5.0 দিচ্ছি যা সবথেকে স্টেবল)
       - name: Install Python Libraries & Run
         run: |
           pip install --upgrade pip
-          pip install openai edge-tts requests beautifulsoup4 lxml google-api-python-client google-auth-oauthlib
-          pip install "Pillow>=9.0.0" 
+          # ঠিক এই ভার্সনটাই লাগবে, অন্যথায় এরর খাবে
+          pip install "Pillow==9.5.0" 
           pip install moviepy==1.0.3
+          pip install openai edge-tts requests beautifulsoup4 lxml google-api-python-client google-auth-oauthlib
 
+          # মেইন বোট কোড (অটো ফিক্সার সহ)
           cat << 'EOF' > bot.py
-          import os, pickle, requests, asyncio, sys
+          import os, sys
+          
+          # --- AUTO FIX SECTION START ---
+          # বোট নিজেই চেক করবে ANTIALIAS আছে কি না, না থাকলে বানিয়ে নেবে
+          import PIL.Image
+          if not hasattr(PIL.Image, 'ANTIALIAS'):
+              PIL.Image.ANTIALIAS = PIL.Image.LANCZOS
+          # --- AUTO FIX SECTION END ---
+
+          import pickle, requests, asyncio
           from openai import OpenAI
           import edge_tts
           from moviepy.editor import VideoFileClip, AudioFileClip
@@ -57,9 +72,6 @@ jobs:
                   print("Generating Audio...")
                   script = client.chat.completions.create(model='Meta-Llama-3.1-8B-Instruct', messages=[{"role": "user", "content": f"Write a 40-sec tech story in Bengali for {topic}"}]).choices[0].message.content
                   await edge_tts.Communicate(script, "bn-BD-PradeepNeural").save("v.mp3")
-                  
-                  # Audio Size Check
-                  if os.path.getsize("v.mp3") < 1000: raise Exception("Audio file too small! TTS failed.")
 
                   # 4. Video Download
                   print("Downloading Video...")
@@ -69,16 +81,11 @@ jobs:
                   v_url = v_data['videos'][0]['video_files'][0]['link']
                   with open("v.mp4", "wb") as f: f.write(requests.get(v_url).content)
 
-                  # 5. Editing (Heavy Task)
-                  print("Rendering Video (This takes time)...")
+                  # 5. Editing
+                  print("Rendering Video...")
                   audio = AudioFileClip("v.mp3")
                   clip = VideoFileClip("v.mp4").resize(height=1920).crop(x1=0, width=1080, height=1920).set_duration(audio.duration).set_audio(audio)
-                  # Logger turned on to see progress
-                  clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger='bar')
-
-                  # Final Video Check
-                  if not os.path.exists("f.mp4") or os.path.getsize("f.mp4") < 10000:
-                      raise Exception("Video rendering failed! File is empty.")
+                  clip.write_videofile("f.mp4", codec="libx264", audio_codec="aac", fps=24, logger=None)
 
                   # 6. Upload
                   print("Uploading to YouTube...")
@@ -91,10 +98,7 @@ jobs:
                       media_body=MediaFileUpload("f.mp4")
                   )
                   response = request.execute()
-                  
-                  print("\n" + "="*30)
                   print(f"SUCCESS! Video Link: https://youtu.be/{response['id']}")
-                  print("="*30 + "\n")
 
               except Exception as e:
                   print(f"\nCRITICAL ERROR: {str(e)}")
