@@ -1,8 +1,8 @@
 import os, sys, subprocess, time, random, glob, pickle, json
 
-# ১. লাইব্রেরিগুলো অটো-ইন্সটল করার ব্যবস্থা
+# ১. প্রো-লেভেল টুলস ইন্সটলেশন
 def install_requirements():
-    print("🛠️ সজীব, তোর সিস্টেম রেডি করছি... লাইব্রেরি ইন্সটল হচ্ছে।")
+    print("🛠️ সজীব, তোর প্রো-স্টুডিও রেডি হচ্ছে... সব টুলস ইন্সটল করছি।")
     pkgs = ["requests", "google-generativeai", "google-api-python-client", "duckduckgo-search", "mutagen", "numpy", "opencv-python-headless"]
     subprocess.check_call([sys.executable, "-m", "pip", "install", "-q"] + pkgs)
     os.system("sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null")
@@ -10,70 +10,94 @@ def install_requirements():
 install_requirements()
 
 import requests
+from duckduckgo_search import DDGS
 from mutagen.mp3 import MP3
 import google.generativeai as genai
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 
-# ২. তোর ৩টি চাবি সরাসরি এখানে অ্যাড করে দিলাম
+# ২. তোর ৩টি চাবি সরাসরি এখানে দেওয়া আছে
 PEXELS_API_KEY = "NsXM87PP9rOpl2kZoGh3rbY5FSZuGUURrlQxO2mC3nVjOSDBDlgWnkJF"
 ELEVENLABS_API_KEY = "sk_e550b35b2daa91280dc1823876db714e265a973df2daadae"
 GEMINI_API_KEY = "AIzaSyD98qV_oHMMXXVm90Cd5CbddITpWXZcBng"
 
-def start_engine():
-    print("🎬 সজীবের প্রো-বট চালু হচ্ছে...")
+def start_pro_engine():
+    print("🎬 সজীবের প্রো-লেভেল অটোমেশন শুরু হচ্ছে...")
     
-    # ব্র্যাকেটওয়ালা ফাইল (token (3).pickle) খুঁজে বের করা
+    # টোকেন ফাইল খুঁজে নেওয়া (token (3).pickle বা অন্য যে কোনো)
     pickle_files = glob.glob("token*.pickle")
     if not pickle_files:
-        print("❌ এরর: কোনো token.pickle ফাইল পাওয়া যায়নি! ফাইল আপলোড কর।")
-        return
-    
-    token_file = pickle_files[0] 
-    print(f"✅ টোকেন ফাইল পাওয়া গেছে: {token_file}")
+        print("❌ এরর: কোনো token.pickle ফাইল পাওয়া যায়নি!"); return
+    token_file = pickle_files[0]
+    print(f"✅ টোকেন ফাইল রেডি: {token_file}")
 
-    # ৩. জেমিনি দিয়ে ভাইরাল হিংলিশ কাহিনী তৈরি
+    # ৩. জেমিনি দিয়ে ভাইরাল কাহিনী ও স্ক্রিপ্ট তৈরি
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
+    
+    log = "গুগল থেকে ভাইরাল টপিক নিয়ে কাহিনী লিখছি..."
+    print(f"🔍 {log}")
+    
     try:
-        prompt = "Write a viral 2-sentence emotional story about success in Hinglish. Start with a hook. No emojis."
+        prompt = """
+        Write a viral, deep, and emotional 1-minute YouTube Shorts script in Hinglish (Hindi+English).
+        Topic: Dark Psychology or Success Motivation. 
+        Structure: 
+        1. Strong Hook (3 seconds).
+        2. Deep Story/Lesson.
+        3. Powerful Ending.
+        Format: JSON only with keys: "script", "mood" (Sad/Sigma/Deep), "query" (Pexels keywords).
+        """
         res = model.generate_content(prompt)
-        script = res.text.strip()
+        data = json.loads(res.text.replace("```json", "").replace("```", ""))
+        script = data['script']
+        mood = data['mood']
+        v_query = data['query']
     except:
         script = "Jab sab sath chhod dein, tab samajh lena kamyabi ka waqt shuru hua hai."
-    print(f"📝 স্ক্রিপ্ট রেডি: {script}")
+        mood = "Deep"
+        v_query = "cinematic dark lonely"
 
-    # ৪. ইলেভেন ল্যাবস দিয়ে হাই-কোয়ালিটি ভয়েস
-    print("🎙️ প্রফেশনাল ভয়েস তৈরি হচ্ছে...")
-    voice_url = "https://api.elevenlabs.io/v1/text-to-speech/pNInz6obpgDQGcFmaJgB" # Adam Voice
+    print(f"📝 মুড: {mood} | কাহিনী রেডি!")
+
+    # ৪. ইলেভেন ল্যাবস দিয়ে গাম্ভীর্যপূর্ণ ভয়েস তৈরি
+    print("🎙️ প্রফেশনাল এআই ভয়েস তৈরি হচ্ছে...")
+    voice_ids = {"Sad": "MF3mGyEYCl7XYWbV9V6O", "Sigma": "ThT5KcBeYPX3keUQqHPh", "Deep": "pNInz6obpgDQGcFmaJgB"}
+    vid = voice_ids.get(mood, "pNInz6obpgDQGcFmaJgB")
+    
+    v_url = f"https://api.elevenlabs.io/v1/text-to-speech/{vid}"
     headers = {"xi-api-key": ELEVENLABS_API_KEY, "Content-Type": "application/json"}
-    data = {"text": script, "model_id": "eleven_multilingual_v2"}
-    r = requests.post(voice_url, json=data, headers=headers)
+    v_data = {"text": script, "model_id": "eleven_multilingual_v2", "voice_settings": {"stability": 0.5, "similarity_boost": 0.75}}
     
-    if r.status_code == 200:
-        with open("voice.mp3", "wb") as f: f.write(r.content)
-    else:
-        print(f"❌ ভয়েস এরর: {r.text}"); return
+    r = requests.post(v_url, json=v_data, headers=headers)
+    with open("voice.mp3", "wb") as f: f.write(r.content)
 
-    # ৫. পিক্সেল থেকে এইচডি ভিডিও ডাউনলোড
-    print("⬇️ এইচডি ভিডিও ডাউনলোড হচ্ছে...")
-    headers_v = {"Authorization": PEXELS_API_KEY}
-    v_search_url = "https://api.pexels.com/videos/search?query=cinematic motivation dark&per_page=1&orientation=portrait"
-    v_data = requests.get(v_search_url, headers=headers_v).json()
-    
-    if v_data.get('videos'):
-        v_link = v_data['videos'][0]['video_files'][0]['link']
-        with open("video.mp4", "wb") as f: f.write(requests.get(v_link).content)
-    else:
-        print("❌ ভিডিও পাওয়া যায়নি!"); return
+    # ৫. Pexels থেকে হাই-কোয়ালিটি সিনেমাটিক ভিডিও ডাউনলোড
+    print("⬇️ পিক্সেল থেকে এইচডি ভিডিও ডাউনলোড করছি...")
+    p_headers = {"Authorization": PEXELS_API_KEY}
+    p_url = f"https://api.pexels.com/videos/search?query={v_query}&per_page=1&orientation=portrait"
+    v_res = requests.get(p_url, headers=p_headers).json()
+    v_link = v_res['videos'][0]['video_files'][0]['link']
+    with open("video.mp4", "wb") as f: f.write(requests.get(v_link).content)
 
-    # ৬. এফএফএমপিইগ দিয়ে মাস্টার এডিটিং
+    # ৬. প্রো-লেভেল এডিটিং (ভয়েস + ব্যাকগ্রাউন্ড মিউজিক + ভিডিও)
     print("🎬 প্রো-লেভেল এডিটিং চলছে...")
     audio_dur = MP3("voice.mp3").info.length
-    # ভিডিওকে অডিওর সাথে লুপ করে ফিট করা
-    os.system(f'ffmpeg -y -stream_loop -1 -i video.mp4 -i voice.mp3 -map 0:v -map 1:a -c:v libx264 -t {audio_dur} final.mp4')
+    
+    # ব্যাকগ্রাউন্ড মিউজিক ডাউনলোড (মুড অনুযায়ী)
+    m_url = "https://cdn.pixabay.com/download/audio/2022/03/09/audio_c8c8a73467.mp3" # Cinematic Bg
+    with open("bg.mp3", "wb") as f: f.write(requests.get(m_url).content)
 
-    # ৭. ইউটিউবে অটোমেটিক আপলোড
+    # FFmpeg দিয়ে সবকিছু মিক্স করা (মিউজিক ভলিউম কমিয়ে ভয়েস বাড়িয়ে)
+    cmd = (
+        f'ffmpeg -y -stream_loop -1 -i video.mp4 -i voice.mp3 -i bg.mp3 '
+        f'-filter_complex "[2:a]volume=0.15[bg];[1:a][bg]amix=inputs=2:duration=first[a];'
+        f'[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[v]" '
+        f'-map "[v]" -map "[a]" -c:v libx264 -t {audio_dur} final.mp4'
+    )
+    subprocess.call(cmd, shell=True)
+
+    # ৭. ইউটিউব অটো-আপলোড
     print("☁️ ইউটিউবে আপলোড হচ্ছে...")
     try:
         with open(token_file, 'rb') as t: creds = pickle.load(t)
@@ -82,7 +106,7 @@ def start_engine():
             part="snippet,status",
             body={
                 "snippet": {
-                    "title": "Kamyabi ki Kahani 🔥 #Shorts #Success #Motivation",
+                    "title": f"Life Reality 🔥 #Shorts #{mood} #Motivation",
                     "description": script,
                     "categoryId": "27"
                 },
@@ -90,10 +114,10 @@ def start_engine():
             },
             media_body=MediaFileUpload("final.mp4", resumable=True)
         ).execute()
-        print("🎉 অভিনন্দন সজীব! ভিডিও সফলভাবে আপলোড হয়ে গেছে।")
+        print("🎉 অভিনন্দন সজীব! ভিডিও সফলভাবে আপলোড হয়েছে।")
     except Exception as e:
-        print(f"⚠️ আপলোড সমস্যা: {e}")
+        print(f"❌ আপলোড এরর: {e}")
 
 if __name__ == "__main__":
-    start_engine()
+    start_pro_engine()
     
